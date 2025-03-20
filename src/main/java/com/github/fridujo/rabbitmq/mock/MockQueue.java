@@ -47,7 +47,8 @@ public class MockQueue implements Receiver {
     private final AtomicInteger messageSequence = new AtomicInteger();
     private final Map<Long, Message> unackedMessagesByDeliveryTag = Collections.synchronizedMap(new LinkedHashMap<>());
     private final AtomicBoolean running = new AtomicBoolean(true);
-    private final Map<String, Set<Long>> unackedDeliveryTagsByConsumerTag = Collections.synchronizedMap(new LinkedHashMap<>());
+    private final Map<String, Set<Long>> unackedDeliveryTagsByConsumerTag = Collections
+            .synchronizedMap(new LinkedHashMap<>());
 
     public MockQueue(String name, AmqArguments arguments, ReceiverRegistry receiverRegistry) {
         this.name = name;
@@ -56,17 +57,19 @@ public class MockQueue implements Receiver {
         this.receiverRegistry = receiverRegistry;
 
         messages = new PriorityBlockingQueue<>(11, new MessageComparator(arguments));
-        executorService = new RestartableExecutorService(() -> Executors.newFixedThreadPool(1, new NamedThreadFactory(i -> name + "_queue_consuming")));
+        executorService = new RestartableExecutorService(
+                () -> Executors.newFixedThreadPool(1, new NamedThreadFactory(i -> name + "_queue_consuming")));
         start();
     }
 
     private void start() {
         executorService.submit(() -> {
             while (running.get()) {
-                while (deliverToConsumerIfPossible()) ;
+                while (deliverToConsumerIfPossible())
+                    ;
                 runAndTransformExceptions(
-                    () -> TimeUnit.MILLISECONDS.sleep(SLEEPING_TIME_BETWEEN_SUBMISSIONS_TO_CONSUMERS),
-                    e -> new RuntimeException("Queue " + name + " consumer Thread have been interrupted", e));
+                        () -> TimeUnit.MILLISECONDS.sleep(SLEEPING_TIME_BETWEEN_SUBMISSIONS_TO_CONSUMERS),
+                        e -> new RuntimeException("Queue " + name + " consumer Thread have been interrupted", e));
             }
         });
     }
@@ -89,14 +92,16 @@ public class MockQueue implements Receiver {
                 } else {
                     List<ConsumerAndTag> consumerAndTags = new ArrayList<>(consumersByTag.size());
 
-                    consumersByTag.values().forEach(consumerAndTags::add);  // iterates while synchronized
+                    consumersByTag.values().forEach(consumerAndTags::add); // iterates while synchronized
 
                     int index = consumerRollingSequence.incrementAndGet() % consumerAndTags.size();
                     ConsumerAndTag nextConsumer = consumerAndTags.get(index);
                     long deliveryTag = nextConsumer.deliveryTagSupplier.get();
 
                     unackedMessagesByDeliveryTag.put(deliveryTag, message);
-                    unackedDeliveryTagsByConsumerTag.compute(nextConsumer.tag, (k, v) -> {  // manipulate the map, and its contained set while synchronized
+                    unackedDeliveryTagsByConsumerTag.compute(nextConsumer.tag, (k, v) -> { // manipulate the map, and
+                                                                                           // its contained set while
+                                                                                           // synchronized
                         Set<Long> set = v == null ? new LinkedHashSet<>() : v;
 
                         set.add(deliveryTag);
@@ -105,12 +110,13 @@ public class MockQueue implements Receiver {
                     });
 
                     Envelope envelope = new Envelope(deliveryTag,
-                        message.redelivered,
-                        message.exchangeName,
-                        message.routingKey);
+                            message.redelivered,
+                            message.exchangeName,
+                            message.routingKey);
                     try {
                         LOGGER.debug(localized("delivering message to consumer"));
-                        nextConsumer.mockChannel.getMetricsCollector().consumedMessage(nextConsumer.mockChannel, deliveryTag, nextConsumer.tag);
+                        nextConsumer.mockChannel.getMetricsCollector().consumedMessage(nextConsumer.mockChannel,
+                                deliveryTag, nextConsumer.tag);
                         nextConsumer.consumer.handleDelivery(nextConsumer.tag, envelope, message.props, message.body);
                         if (nextConsumer.autoAck) {
                             internal_removeFromUnacked(deliveryTag);
@@ -142,19 +148,22 @@ public class MockQueue implements Receiver {
 
     public boolean publish(String exchangeName, String routingKey, AMQP.BasicProperties props, byte[] body) {
         boolean queueLengthLimitReached = queueLengthLimitReached() || queueLengthBytesLimitReached();
+        System.out.println("Queue full status inside publish: " + queueLengthLimitReached);
+
         if (queueLengthLimitReached && arguments.overflow() == AmqArguments.Overflow.REJECT_PUBLISH) {
-            return true;
+            System.out.println("Message rejected due to overflow");
+            return false;
         }
         Message message = new Message(
-            messageSequence.incrementAndGet(),
-            exchangeName,
-            routingKey,
-            props,
-            body,
-            computeExpiryTime(props)
-        );
+                messageSequence.incrementAndGet(),
+                exchangeName,
+                routingKey,
+                props,
+                body,
+                computeExpiryTime(props));
         if (message.expiryTime != -1) {
-            LOGGER.debug(localized("Message published expiring at " + Instant.ofEpochMilli(message.expiryTime)) + ": " + message);
+            LOGGER.debug(localized("Message published expiring at " + Instant.ofEpochMilli(message.expiryTime)) + ": "
+                    + message);
         } else {
             LOGGER.debug(localized("Message published" + ": " + message));
         }
@@ -162,6 +171,7 @@ public class MockQueue implements Receiver {
         if (queueLengthLimitReached) {
             deadLetterWithReason(messages.poll(), DeadLettering.ReasonType.MAX_LEN);
         }
+        System.out.println("Message accepted");
         return true;
     }
 
@@ -170,9 +180,11 @@ public class MockQueue implements Receiver {
         return pointer;
     }
 
-    public void basicConsume(String consumerTag, Consumer consumer, boolean autoAck, Supplier<Long> deliveryTagSupplier, MockConnection mockConnection, MockChannel mockChannel) {
+    public void basicConsume(String consumerTag, Consumer consumer, boolean autoAck, Supplier<Long> deliveryTagSupplier,
+            MockConnection mockConnection, MockChannel mockChannel) {
         LOGGER.debug(localized("registering consumer"));
-        consumersByTag.put(consumerTag, new ConsumerAndTag(consumerTag, consumer, autoAck, deliveryTagSupplier, mockConnection, mockChannel));
+        consumersByTag.put(consumerTag,
+                new ConsumerAndTag(consumerTag, consumer, autoAck, deliveryTagSupplier, mockConnection, mockChannel));
         consumer.handleConsumeOk(consumerTag);
     }
 
@@ -188,16 +200,16 @@ public class MockQueue implements Receiver {
                     unackedMessagesByDeliveryTag.put(deliveryTag, message);
                 }
                 Envelope envelope = new Envelope(
-                    deliveryTag,
-                    false,
-                    message.exchangeName,
-                    message.routingKey);
+                        deliveryTag,
+                        false,
+                        message.exchangeName,
+                        message.routingKey);
                 LOGGER.debug(localized("basic_get a message"));
                 return new GetResponse(
-                    envelope,
-                    message.props,
-                    message.body,
-                    messages.size());
+                        envelope,
+                        message.props,
+                        message.body,
+                        messages.size());
             }
         } else {
             LOGGER.debug(localized("basic_get no message available"));
@@ -233,7 +245,7 @@ public class MockQueue implements Receiver {
     }
 
     private Message internal_removeFromUnacked(long deliveryTag) {
-        synchronized(unackedDeliveryTagsByConsumerTag) {  // protects also the nested consumer tag set
+        synchronized (unackedDeliveryTagsByConsumerTag) { // protects also the nested consumer tag set
             Message message = unackedMessagesByDeliveryTag.remove(deliveryTag);
             unackedDeliveryTagsByConsumerTag.forEach((ctag, deliveryTags) -> deliveryTags.remove(deliveryTag));
             return message;
@@ -253,8 +265,9 @@ public class MockQueue implements Receiver {
 
             List<Long> unackedDeliveryTags;
 
-            synchronized(unackedDeliveryTagsByConsumerTag) {  // protects also the nested consumer tag set
-                unackedDeliveryTags = new ArrayList<>(unackedDeliveryTagsByConsumerTag.computeIfAbsent(consumerTag, k -> Collections.emptySet()));
+            synchronized (unackedDeliveryTagsByConsumerTag) { // protects also the nested consumer tag set
+                unackedDeliveryTags = new ArrayList<>(
+                        unackedDeliveryTagsByConsumerTag.computeIfAbsent(consumerTag, k -> Collections.emptySet()));
             }
 
             unackedDeliveryTags.forEach(deliveryTag -> basicReject(deliveryTag, true));
@@ -295,11 +308,9 @@ public class MockQueue implements Receiver {
 
     private void stopDeliveryLoop() {
         executorService.shutdown();
-        runAndEatExceptions(() ->
-            executorService.awaitTermination(
+        runAndEatExceptions(() -> executorService.awaitTermination(
                 SLEEPING_TIME_BETWEEN_SUBMISSIONS_TO_CONSUMERS * 3,
-                TimeUnit.MILLISECONDS)
-        );
+                TimeUnit.MILLISECONDS));
     }
 
     private void cancelConsumers() {
@@ -322,12 +333,14 @@ public class MockQueue implements Receiver {
     public void basicRecover(boolean requeue) {
         Set<Long> unackedDeliveryTags = new LinkedHashSet<>();
 
-        unackedMessagesByDeliveryTag.keySet().forEach(unackedDeliveryTags::add);  // iterates while synchronized
+        unackedMessagesByDeliveryTag.keySet().forEach(unackedDeliveryTags::add); // iterates while synchronized
 
-        unackedDeliveryTags.forEach(unackedDeliveryTag -> messages.offer(internal_removeFromUnacked(unackedDeliveryTag)));
+        unackedDeliveryTags
+                .forEach(unackedDeliveryTag -> messages.offer(internal_removeFromUnacked(unackedDeliveryTag)));
 
-        synchronized(consumersByTag) {
-            consumersByTag.values().forEach(consumerAndTag -> consumerAndTag.consumer.handleRecoverOk(consumerAndTag.tag));
+        synchronized (consumersByTag) {
+            consumersByTag.values()
+                    .forEach(consumerAndTag -> consumerAndTag.consumer.handleRecoverOk(consumerAndTag.tag));
         }
     }
 
@@ -348,7 +361,7 @@ public class MockQueue implements Receiver {
     private void doWithUnackedUntil(long maxDeliveryTag, java.util.function.Consumer<Long> doWithRelevantDeliveryTag) {
         Set<Long> storedDeliveryTagsToRemove = new LinkedHashSet<>();
 
-        synchronized(unackedMessagesByDeliveryTag) {
+        synchronized (unackedMessagesByDeliveryTag) {
             if (unackedMessagesByDeliveryTag.containsKey(maxDeliveryTag)) {
                 for (Long storedDeliveryTag : unackedMessagesByDeliveryTag.keySet()) {
                     storedDeliveryTagsToRemove.add(storedDeliveryTag);
@@ -364,29 +377,29 @@ public class MockQueue implements Receiver {
 
     private boolean queueLengthLimitReached() {
         return arguments.queueLengthLimit()
-            .map(limit -> limit <= messages.size())
-            .orElse(false);
+                .map(limit -> limit <= messages.size())
+                .orElse(false);
     }
 
     private boolean queueLengthBytesLimitReached() {
         int messageBytesReady = messages.stream().mapToInt(m -> m.body.length).sum();
         return arguments.queueLengthBytesLimit()
-            .map(limit -> limit <= messageBytesReady)
-            .orElse(false);
+                .map(limit -> limit <= messageBytesReady)
+                .orElse(false);
     }
 
     private long computeExpiryTime(AMQP.BasicProperties props) {
         long messageExpiryTimeOfQueue = arguments
-            .getMessageTtlOfQueue()
-            .map(this::computeExpiry)
-            .orElse(-1L);
+                .getMessageTtlOfQueue()
+                .map(this::computeExpiry)
+                .orElse(-1L);
         return getMessageExpiryTime(props).orElse(messageExpiryTimeOfQueue);
     }
 
     private Optional<Long> getMessageExpiryTime(AMQP.BasicProperties props) {
         return Optional.ofNullable(props.getExpiration())
-            .flatMap(this::toLong)
-            .map(this::computeExpiry);
+                .flatMap(this::toLong)
+                .map(this::computeExpiry);
     }
 
     private Long computeExpiry(long ttl) {
@@ -408,18 +421,17 @@ public class MockQueue implements Receiver {
 
     private void deadLetterWithReason(Message message, DeadLettering.ReasonType reason) {
         arguments.getDeadLetterExchange()
-            .flatMap(receiverRegistry::getReceiver)
-            .ifPresent(deadLetterExchange -> {
+                .flatMap(receiverRegistry::getReceiver)
+                .ifPresent(deadLetterExchange -> {
                     LOGGER.debug(localized("dead-lettered to " + deadLetterExchange + ": " + message));
                     DeadLettering.Event event = new DeadLettering.Event(name, reason, message, 1);
                     BasicProperties props = event.prependOn(message.props);
                     deadLetterExchange.publish(
-                        message.exchangeName,
-                        arguments.getDeadLetterRoutingKey().orElse(message.routingKey),
-                        props,
-                        message.body);
-                }
-            );
+                            message.exchangeName,
+                            arguments.getDeadLetterRoutingKey().orElse(message.routingKey),
+                            props,
+                            message.body);
+                });
     }
 
     public List<Message> getAvailableMessages() {
@@ -429,7 +441,7 @@ public class MockQueue implements Receiver {
     public List<Message> getUnackedMessages() {
         ArrayList<Message> unackedMessages = new ArrayList<>(unackedMessagesByDeliveryTag.size());
 
-        unackedMessagesByDeliveryTag.values().forEach(unackedMessages::add);  // iterates while synchronized
+        unackedMessagesByDeliveryTag.values().forEach(unackedMessages::add); // iterates while synchronized
 
         return unackedMessages;
     }
@@ -443,7 +455,8 @@ public class MockQueue implements Receiver {
         private final MockConnection mockConnection;
         private final MockChannel mockChannel;
 
-        ConsumerAndTag(String tag, Consumer consumer, boolean autoAck, Supplier<Long> deliveryTagSupplier, MockConnection mockConnection, MockChannel mockChannel) {
+        ConsumerAndTag(String tag, Consumer consumer, boolean autoAck, Supplier<Long> deliveryTagSupplier,
+                MockConnection mockConnection, MockChannel mockChannel) {
             this.tag = tag;
             this.consumer = consumer;
             this.autoAck = autoAck;
