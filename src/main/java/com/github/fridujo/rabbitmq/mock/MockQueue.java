@@ -148,10 +148,11 @@ public class MockQueue implements Receiver {
 
     public boolean publish(String exchangeName, String routingKey, AMQP.BasicProperties props, byte[] body) {
         boolean queueLengthLimitReached = queueLengthLimitReached() || queueLengthBytesLimitReached();
-        System.out.println("Queue full status inside publish: " + queueLengthLimitReached);
+        // System.out.println("Queue full status inside publish: " +
+        // queueLengthLimitReached);
 
         if (queueLengthLimitReached && arguments.overflow() == AmqArguments.Overflow.REJECT_PUBLISH) {
-            System.out.println("Message rejected due to overflow");
+            // System.out.println("Message rejected due to overflow");
             return false;
         }
         Message message = new Message(
@@ -171,7 +172,7 @@ public class MockQueue implements Receiver {
         if (queueLengthLimitReached) {
             deadLetterWithReason(messages.poll(), DeadLettering.ReasonType.MAX_LEN);
         }
-        System.out.println("Message accepted");
+        // System.out.println("Message accepted");
         return true;
     }
 
