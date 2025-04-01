@@ -38,8 +38,9 @@ class MockQueueBoundaryTest {
             }
         }
 
-        System.out.println("Total messages accepted: " + acceptedMessages);
-        System.out.println("Queue full status before overflow: " + (acceptedMessages >= 1000));
+        // System.out.println("Total messages accepted: " + acceptedMessages);
+        // System.out.println("Queue full status before overflow: " + (acceptedMessages
+        // >= 1000));
 
         boolean overflowResults = queue.publish("testing", "testKey", new AMQP.BasicProperties(),
                 "Overflow Error Message".getBytes(StandardCharsets.UTF_8));
@@ -52,5 +53,23 @@ class MockQueueBoundaryTest {
             assertFalse(overflowResults, "Queue should decline excess messages.");
         }
 
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 100, 500, 750 })
+    void queueAcceptsMessagesUnderLimit(int messageCount) {
+        int acceptedMessages = 0;
+
+        for (int i = 0; i < messageCount; i++) {
+            boolean accepted = queue.publish("testing", "testKey", new AMQP.BasicProperties(),
+                    ("Message sent " + i).getBytes(StandardCharsets.UTF_8));
+
+            assertTrue(accepted, "Queue should accept messages when under the limit.");
+            if (accepted)
+                acceptedMessages++;
+        }
+
+        System.out.println("Total messages accepted: " + acceptedMessages);
+        assertEquals(messageCount, acceptedMessages, "Queue should accept exactly " + messageCount + " messages.");
     }
 }
