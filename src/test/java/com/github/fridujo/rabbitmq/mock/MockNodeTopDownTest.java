@@ -7,7 +7,6 @@ import com.rabbitmq.client.AMQP;
 
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.Collections;
-import java.util.Map;
 
 public class MockNodeTopDownTest {
     private MockNode mockNode;
@@ -68,5 +67,28 @@ public class MockNodeTopDownTest {
                 IllegalArgumentException.class, () -> mockNode.exchangeDeclare(exchangeName + ".invalid", invalidType,
                         false, false, false, Collections.emptyMap()),
                 "Exchange w/ invalid type should throw an IllegalArgumentException");
+    }
+
+    @Test
+    void queueDeleteUsingValidAndInvalidQueues() {
+        String queueName = "delete.test.queue";
+        mockNode.queueDeclare(queueName, false, false, false, Collections.emptyMap());
+        AMQP.Queue.DeleteOk deleteOk = mockNode.queueDelete(queueName, false, false);
+        assertEquals(0, deleteOk.getMessageCount(), "Deleting queue with 0 messages should return 0");
+        assertThrows(IllegalArgumentException.class, () -> mockNode.messageCount(queueName),
+                "Queue should be gone after deletion");
+
+        String queueNameMessage = "delete.test.queue.message";
+        mockNode.queueDeclare(queueNameMessage, false, false, false, Collections.emptyMap());
+        AMQP.BasicProperties props = new AMQP.BasicProperties.Builder().build();
+        mockNode.basicPublish(MockDefaultExchange.NAME, queueNameMessage, false, false, props, "Test".getBytes());
+        deleteOk = mockNode.queueDelete(queueNameMessage, false, false);
+        assertEquals(1, deleteOk.getMessageCount(), "Deleting a queue with 1 message should return 1");
+        assertThrows(IllegalArgumentException.class, () -> mockNode.messageCount(queueNameMessage),
+                "Queue should be gone after deletion");
+
+        String noQueue = "no.queue";
+        deleteOk = mockNode.queueDelete(noQueue, false, false);
+        assertEquals(0, deleteOk.getMessageCount(), "Deleting a non existent queue should return 0 messages");
     }
 }
