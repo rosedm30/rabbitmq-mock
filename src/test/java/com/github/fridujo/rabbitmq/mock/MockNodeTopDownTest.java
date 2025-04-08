@@ -5,9 +5,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.rabbitmq.client.AMQP;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import java.util.Collections;
+import java.util.Map;
 
 public class MockNodeTopDownTest {
     private MockNode mockNode;
@@ -44,5 +44,29 @@ public class MockNodeTopDownTest {
         mockNode.basicPublish(MockDefaultExchange.NAME, name, false, false, props, "Message".getBytes());
         purgeOk = mockNode.queuePurge(name);
         assertEquals(1, purgeOk.getMessageCount(), "Purge 1 message should return 1 message removed");
+    }
+
+    @Test
+    void exchangeDeclareUsingValidAndInvalidTypes() {
+        String exchangeName = "test.exchange";
+        String validType = "direct";
+        AMQP.Exchange.DeclareOk declareOk = mockNode.exchangeDeclare(exchangeName, validType, false, false, false,
+                Collections.emptyMap());
+        assertNotNull(declareOk, "Exchange with valid type should pass");
+
+        String queueName = "test.queue";
+        mockNode.queueDeclare(queueName, false, false, false, Collections.emptyMap());
+        mockNode.queueBind(queueName, exchangeName, "test.routing.key", Collections.emptyMap());
+        AMQP.BasicProperties props = new AMQP.BasicProperties.Builder().build();
+        boolean publishResult = mockNode.basicPublish(exchangeName, "test.routing.key", false, false, props,
+                "Test".getBytes());
+        assertTrue(publishResult, "Able to publish to exchange");
+        assertEquals(1, mockNode.messageCount(queueName), "Message sent to queue by exchange");
+
+        String invalidType = "invalid-type";
+        assertThrows(
+                IllegalArgumentException.class, () -> mockNode.exchangeDeclare(exchangeName + ".invalid", invalidType,
+                        false, false, false, Collections.emptyMap()),
+                "Exchange w/ invalid type should throw an IllegalArgumentException");
     }
 }
