@@ -7,6 +7,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.rabbitmq.client.AMQP;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import com.rabbitmq.client.GetResponse;
+import java.util.function.Supplier;
 
 // Dana's test cases
 
@@ -73,5 +75,33 @@ class MockQueueBoundaryTest {
 
         System.out.println("Total messages accepted: " + acceptedMessages);
         assertEquals(messageCount, acceptedMessages, "Queue should accept exactly " + messageCount + " messages.");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 0, 1, 1000 })
+    void basicGetWithBoundaryMessageCounts(int messageCount) {
+        Supplier<Long> deliveryTagSupplier = () -> 1L;
+        AMQP.BasicProperties props = new AMQP.BasicProperties.Builder().build();
+        for (int i = 0; i < messageCount; i++) {
+            boolean accepted = queue.publish("testing", "testKey" + i, props,
+                    ("Message " + i).getBytes(StandardCharsets.UTF_8));
+            assertTrue(accepted, "Queue should accept message " + i);
+        }
+        assertEquals(messageCount, queue.messageCount(),
+                "Queue should contain " + messageCount + " messages before get");
+
+        GetResponse getResponse = queue.basicGet(true, deliveryTagSupplier);
+
+        if (messageCount == 0) {
+            assertNull(getResponse, "basicGet should return null when queue is empty");
+            assertEquals(0, queue.messageCount(), "Message count should be 0 after basicGet is used on an empty queue");
+        } else {
+            assertNotNull(getResponse,
+                    "basicGet should return a message when the queue has " + messageCount + " messages");
+            assertEquals("Message 0", new String(getResponse.getBody(), StandardCharsets.UTF_8),
+                    "basicGet should return the first message");
+            assertEquals(messageCount - 1, queue.messageCount(),
+                    "Message coutn should decrese by 1 after using basicGet");
+        }
     }
 }

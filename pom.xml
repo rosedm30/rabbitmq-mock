@@ -115,6 +115,18 @@
             <version>${awaitility.version}</version>
             <scope>test</scope>
         </dependency>
+    
+      <dependency>
+        <groupId>org.elasticsearch</groupId>
+        <artifactId>elasticsearch</artifactId>
+        <version>7.3.0</version>
+      </dependency>
+    
+      <dependency>
+        <groupId>com.rabbitmq</groupId>
+        <artifactId>amqp-client</artifactId>
+        <version>5.7.3</version>
+      </dependency>
     </dependencies>
 
     <build>
