@@ -91,4 +91,35 @@ public class MockNodeTopDownTest {
         deleteOk = mockNode.queueDelete(noQueue, false, false);
         assertEquals(0, deleteOk.getMessageCount(), "Deleting a non existent queue should return 0 messages");
     }
+
+    @Test
+    void exchangeDeleteUsingQueues() {
+        String exchangeNameNoBindings = "delete.test.exchange.no.bindings";
+        mockNode.exchangeDeclare(exchangeNameNoBindings, "direct", false, false, false, Collections.emptyMap());
+        AMQP.Exchange.DeleteOk deleteOk = mockNode.exchangeDelete(exchangeNameNoBindings);
+        assertNotNull(deleteOk, "Deleting an exchange with no bindings should pass");
+
+        String exchangeNameWithBinding = "delete.test.exchange.with.binding";
+        String queueName = "delete.test.queue";
+        mockNode.exchangeDeclare(exchangeNameWithBinding, "direct", false, false, false, Collections.emptyMap());
+        mockNode.queueDeclare(queueName, false, false, false, Collections.emptyMap());
+        mockNode.queueBind(queueName, exchangeNameWithBinding, "test.routing.key", Collections.emptyMap());
+
+        AMQP.BasicProperties props = new AMQP.BasicProperties.Builder().build();
+        boolean publishResult = mockNode.basicPublish(exchangeNameWithBinding, "test.routing.key", false, false, props,
+                "TEST".getBytes());
+        assertTrue(publishResult, "Publishing to exchange before being deleted should pass");
+        assertEquals(1, mockNode.messageCount(queueName), "Queue should have 1 message before being deleted");
+
+        deleteOk = mockNode.exchangeDelete(exchangeNameWithBinding);
+        assertNotNull(deleteOk, "Deleting an exchange with 1 binding should pass");
+        assertThrows(IllegalArgumentException.class,
+                () -> mockNode.basicPublish(exchangeNameWithBinding, "test.routing.key", false, false, props,
+                        "TEST".getBytes()),
+                "Publishing to a deleted exchange should throw and IllegalArgumentException");
+
+        String noExchange = "no.exchange";
+        deleteOk = mockNode.exchangeDelete(noExchange);
+        assertNotNull(deleteOk, "Deleting a non existent exchange should pass");
+    }
 }
