@@ -104,4 +104,25 @@ class MockQueueBoundaryTest {
                     "Message coutn should decrese by 1 after using basicGet");
         }
     }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 1023, 1024, 1025 })
+    void messageSize(int messageSize) {
+        AmqArguments args = new AmqArguments(
+                Map.of(AmqArguments.QUEUE_MAX_LENGTH_BYTES_KEY, 1024, AmqArguments.OVERFLOW_KEY, "reject-publish"));
+
+        System.out.println("Byte limit argument set: " + args.queueLengthBytesLimit());
+
+        ReceiverRegistry registry = new MockNode();
+        MockQueue byteQueue = new MockQueue("byteQueue", args, registry);
+
+        byte[] body = new byte[messageSize];
+        boolean accepted = byteQueue.publish("testing", "key", new AMQP.BasicProperties(), body);
+
+        if (messageSize <= 1024) {
+            assertTrue(accepted, "Message under or equal to the limit should be accepted");
+        } else {
+            assertTrue(accepted, "Message over limit should denied");
+        }
+    }
 }
