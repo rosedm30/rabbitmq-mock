@@ -1,8 +1,10 @@
 package com.github.fridujo.rabbitmq.mock;
 
+import static org.assertj.core.api.Assertions.offset;
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import com.rabbitmq.client.AMQP;
 import java.nio.charset.StandardCharsets;
@@ -122,7 +124,60 @@ class MockQueueBoundaryTest {
         if (messageSize <= 1024) {
             assertTrue(accepted, "Message under or equal to the limit should be accepted");
         } else {
-            assertTrue(accepted, "Message over limit should denied");
+            assertFalse(accepted, "Message over limit should denied");
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "true, true",
+            "true, false",
+            "false, true",
+            "false, false"
+    })
+    void rejectUsingRequeueBehavior(boolean hasValidDeliveryTag, boolean requeue) {
+        MockNode node = new MockNode();
+        node.exchangeDeclare("dlx", "direct", false, false, false, Map.of());
+        node.queueDeclare("dlq", false, false, false, Map.of());
+        node.queueBind("dlq", "dlx", "", Map.of());
+
+        AmqArguments args = new AmqArguments(Map.of(
+                AmqArguments.DEAD_LETTER_EXCHANGE_KEY, "dlx",
+                "x-dead-letter-routing-key", "",
+                AmqArguments.QUEUE_MAX_LENGTH_KEY, 1000,
+                AmqArguments.OVERFLOW_KEY, "reject-publish"));
+        MockQueue queue = new MockQueue("testQueue", args, node);
+        MockQueue dlq = node.getQueue("dlq")
+                .orElseThrow(() -> new IllegalStateException("Dead-letter queue not found"));
+
+        final long[] deliveryTagCounter = { 1L };
+        Supplier<Long> deliveryTagSupplier = () -> deliveryTagCounter[0]++;
+        long testDeliveryTag = 1L;
+        if (hasValidDeliveryTag) {
+            byte[] body = new byte[10];
+            boolean published = queue.publish("testing", "key", new AMQP.BasicProperties(), body);
+            assertTrue(published, "Message is pubilshed correctly");
+            GetResponse response = queue.basicGet(false, deliveryTagSupplier);
+            assertNotNull(response, "basicGet should return message");
+            assertEquals(1, queue.getUnackedMessages().size(), "Message should be unacked after using basicGet");
+        }
+
+        long deliveryTagUsed = hasValidDeliveryTag ? testDeliveryTag : 999L;
+        queue.basicReject(deliveryTagUsed, requeue);
+
+        if (!hasValidDeliveryTag) {
+            assertEquals(0, queue.messageCount(), "Queue should stay empty with invalid delivery tag");
+            assertEquals(0, queue.getUnackedMessages().size(), "No unacked messages should be present with invalid");
+            assertEquals(0, dlq.messageCount(), "Dead-letter queue should stay empty with invalid delivery tag");
+        } else {
+            assertEquals(0, queue.getUnackedMessages().size(), "Message should be removed from unacked message");
+            if (requeue) {
+                assertEquals(1, queue.messageCount(), "Message should be requeued when requeue is true");
+                assertEquals(0, dlq.messageCount(), "Dead-letter queue should stay empty when requeue is true");
+            } else {
+                assertEquals(0, queue.messageCount(), "Message shouldn't be requeued when requeue is false");
+                assertEquals(1, dlq.messageCount(), "Message should be dead-lettered when requeue is false");
+            }
         }
     }
 }
